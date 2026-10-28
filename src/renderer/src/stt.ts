@@ -27,6 +27,8 @@ class OpenAiRealtimeClient implements SttClient {
   private socket: WebSocket | null = null
   private ready = false
   private queue: Int16Array[] = []
+  private batch: Int16Array[] = []
+  private batchSamples = 0
 
   constructor(speaker: Speaker, config: SttRuntimeConfig, events: SttEvents) {
     this.speaker = speaker
@@ -103,6 +105,20 @@ class OpenAiRealtimeClient implements SttClient {
     })
   }
 
+  private flushBatch(): void {
+    if (this.batch.length === 0) return
+    const total = this.batchSamples
+    const merged = new Int16Array(total)
+    let offset = 0
+    for (const chunk of this.batch) {
+      merged.set(chunk, offset)
+      offset += chunk.length
+    }
+    this.batch = []
+    this.batchSamples = 0
+    this.sendFrame(merged)
+  }
+
   private sendFrame(pcm: Int16Array): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return
     const upsampled = resamplePcm(pcm, SAMPLE_RATE, 24000)
@@ -117,12 +133,19 @@ class OpenAiRealtimeClient implements SttClient {
       if (this.queue.length > 200) this.queue.shift()
       return
     }
-    this.sendFrame(pcm)
+    this.batch.push(pcm)
+    this.batchSamples += pcm.length
+    if (this.batchSamples >= 3200) {
+      this.flushBatch()
+    }
   }
 
   stop(): void {
+    this.flushBatch()
     this.ready = false
     this.queue = []
+    this.batch = []
+    this.batchSamples = 0
     if (this.socket) {
       try {
         this.socket.close()

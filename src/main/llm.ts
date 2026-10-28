@@ -146,13 +146,20 @@ async function streamOpenAi(
   onDelta: (text: string) => void,
   signal: AbortSignal
 ): Promise<StreamResult> {
-  const base = settings.llm.baseUrl.replace(/\/+$/, '')
+  const isOllama = settings.llm.provider === 'ollama'
+  const rawBase = settings.llm.baseUrl || (isOllama ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1')
+  const base = rawBase.replace(/\/+$/, '')
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+  if (settings.llm.apiKey) {
+    headers['Authorization'] = `Bearer ${settings.llm.apiKey}`
+  } else if (!isOllama) {
+    headers['Authorization'] = 'Bearer dummy'
+  }
   const response = await fetch(`${base}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.llm.apiKey}`
-    },
+    headers,
     body: JSON.stringify({
       model: settings.llm.model,
       stream: true,

@@ -125,7 +125,12 @@ export class AudioCapture {
           audio: true
         })
         for (const track of stream.getVideoTracks()) track.stop()
-        if (stream.getAudioTracks().length > 0) {
+        const audioTracks = stream.getAudioTracks()
+        if (audioTracks.length > 0) {
+          audioTracks[0].onended = () => {
+            this.enabled.set('them', false)
+            this.streams.delete('them')
+          }
           this.attach(context, stream, 'them')
           result.system = true
         } else {

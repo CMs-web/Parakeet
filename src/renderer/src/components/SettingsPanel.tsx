@@ -110,44 +110,66 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
               Provider
               <select
                 value={draft.llm.provider}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const prov = event.target.value as Settings['llm']['provider']
+                  const isOllama = prov === 'ollama'
                   update('llm', {
                     ...draft.llm,
-                    provider: event.target.value as Settings['llm']['provider']
+                    provider: prov,
+                    baseUrl: isOllama && (!draft.llm.baseUrl || draft.llm.baseUrl.includes('openai.com'))
+                      ? 'http://localhost:11434/v1'
+                      : draft.llm.baseUrl,
+                    model: isOllama && (draft.llm.model.startsWith('gpt-') || draft.llm.model.startsWith('gemini'))
+                      ? 'qwen2.5:3b'
+                      : draft.llm.model
                   })
-                }
+                }}
               >
                 <option value="openai">OpenAI compatible</option>
                 <option value="anthropic">Anthropic</option>
+                <option value="ollama">Ollama (Local: localhost:11434)</option>
               </select>
             </label>
             <label className="field">
               Model
               <input
                 list="model-options"
+                placeholder={draft.llm.provider === 'ollama' ? 'qwen2.5:3b' : 'gpt-4.1'}
                 value={draft.llm.model}
                 onChange={(event) => update('llm', { ...draft.llm, model: event.target.value })}
               />
               <datalist id="model-options">
-                {MODELS.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
+                {draft.llm.provider === 'ollama' ? (
+                  <>
+                    <option value="qwen2.5:3b">qwen2.5:3b (installed)</option>
+                    <option value="qwen2.5:7b">qwen2.5:7b (installed)</option>
+                    <option value="qwen3-vl:2b">qwen3-vl:2b (installed)</option>
+                    <option value="llama3.2">llama3.2</option>
+                    <option value="deepseek-r1:8b">deepseek-r1:8b</option>
+                  </>
+                ) : (
+                  MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))
+                )}
               </datalist>
             </label>
           </div>
           <label className="field">
             Base URL
             <input
+              placeholder={draft.llm.provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1'}
               value={draft.llm.baseUrl}
               onChange={(event) => update('llm', { ...draft.llm, baseUrl: event.target.value })}
             />
           </label>
           <label className="field">
-            API key
+            API key {draft.llm.provider === 'ollama' ? '(Optional for local Ollama)' : ''}
             <input
               type="password"
+              placeholder={draft.llm.provider === 'ollama' ? 'Not required for Ollama' : ''}
               value={draft.llm.apiKey}
               onChange={(event) => update('llm', { ...draft.llm, apiKey: event.target.value })}
             />

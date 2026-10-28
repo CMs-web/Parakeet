@@ -3,7 +3,7 @@ import { DEFAULT_AI_MODEL, PRODUCT_LIMITS, type MeetingApp } from './limits'
 export type SessionMode = 'interview' | 'regular_call'
 export type Speaker = 'you' | 'them'
 export type SttProvider = 'speechmatics' | 'openai' | 'local'
-export type LlmProvider = 'openai' | 'anthropic'
+export type LlmProvider = 'openai' | 'anthropic' | 'ollama'
 
 /** Enumerations recovered from the 3.9.135 renderer; see shared/limits.ts. */
 export type ResponseFormat = 'paragraph' | 'balanced' | 'bullets'

@@ -26,13 +26,13 @@ This document outlines the roadmap to complete the Parakeet AI clone (Reverse En
 ## 4. Audio & Speech Processing
 - [x] Audio Capture (Microphone & System Audio Loopback) (`src/renderer/src/audio.ts`).
 - [x] Speech-to-Text Client (OpenAI, Speechmatics, Local) (`src/renderer/src/stt.ts`).
-- [ ] Optimize audio streaming & session handover to STT.
+- [x] Optimize audio streaming & session handover to STT.
 
 ## 5. Intelligence & Answer Generation
 - [x] LLM Streaming Communication (`src/main/llm.ts`).
 - [x] Answer Generation using transcript + document context (`src/main/ipc.ts`).
 - [x] UI Logic to trigger answers (`ask` callback) and stream updates (`AnswerDelta`).
-- [ ] Integrate billing/limits with session start (10-minute trial / 30-minute paid sessions).
+- [x] Integrate billing/limits with session start (10-minute trial / 30-minute paid sessions).
 
 ## 6. Advanced Features & Integration
 - [x] Session history tracking and Markdown export.
@@ -43,4 +43,5 @@ This document outlines the roadmap to complete the Parakeet AI clone (Reverse En
 - [x] Fix `documents.ts` and `index.ts` TS compilation errors.
 - [x] Run `npm run typecheck` to ensure 0 errors.
 - [x] Run `npm run build` to produce the final executable.
-- [ ] Test Windows Installer and executable build.
+- [x] Test Windows Installer and executable build.
+ 
