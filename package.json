@@ -1,8 +1,8 @@
 {
-  "name": "parakeet-clone",
+  "name": "talkwise",
   "version": "0.1.0",
   "private": true,
-  "description": "Live conversation copilot desktop app",
+  "description": "Talkwise: Live AI Assistant for Calls, Meetings and Interviews",
   "main": "./out/main/index.js",
   "author": "local",
   "scripts": {
@@ -29,8 +29,8 @@
     "vite": "^5.4.11"
   },
   "build": {
-    "appId": "com.local.parakeetclone",
-    "productName": "Parakeet Clone",
+    "appId": "com.talkwise.app",
+    "productName": "Talkwise",
     "directories": {
       "output": "release"
     },

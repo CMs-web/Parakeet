@@ -44,7 +44,7 @@ function Overlay(): React.ReactElement {
       <header className="overlay-header">
         <div className="brand">
           <span className={`dot dot-${state.status}`} />
-          <span className="brand-name">Parakeet</span>
+          <span className="brand-name">Talkwise</span>
           <span className="overlay-status">{statusLabel}</span>
         </div>
         <div className="overlay-meta">

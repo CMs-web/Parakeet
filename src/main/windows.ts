@@ -28,6 +28,7 @@ export function getOverlayWindow(): BrowserWindow | null {
 export function createMainWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
   mainWindow = new BrowserWindow({
+    title: 'Talkwise',
     width: 1200,
     height: 800,
     minWidth: 940,
@@ -42,7 +43,12 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false
     }
   })
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+  }, 1200)
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -62,6 +68,7 @@ export function createOverlayWindow(position: 'left' | 'right', width: number): 
   const x = position === 'right' ? area.x + area.width - overlayWidth - 24 : area.x + 24
   const y = area.y + 48
   overlayWindow = new BrowserWindow({
+    title: 'Talkwise Overlay',
     width: overlayWidth,
     height: overlayHeight,
     x,

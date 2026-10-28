@@ -98,10 +98,10 @@ function createTray(): void {
   if (tray) return
   const image = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON}`)
   tray = new Tray(image)
-  tray.setToolTip('Parakeet Clone')
+  tray.setToolTip('Talkwise')
   const menu = Menu.buildFromTemplate([
     {
-      label: 'Open ParakeetAI',
+      label: 'Open Talkwise',
       click: () => {
         const window = createMainWindow()
         window.show()
@@ -218,7 +218,7 @@ if (!gotLock) {
       if (change === 'started' && detection.app) {
         tray?.displayBalloon({
           title: 'Meeting detected',
-          content: `${detection.app.appName} is running. Open ParakeetAI to start a session.`
+          content: `${detection.app.appName} is running. Open Talkwise to start a session.`
         })
       }
     })

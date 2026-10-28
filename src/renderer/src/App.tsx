@@ -452,7 +452,7 @@ export default function App(): ReactElement {
         <aside className="sidebar">
           <div className="logo">
             <span className="logo-mark" />
-            Parakeet
+            Talkwise
           </div>
         </aside>
         <main className="main">
@@ -480,7 +480,7 @@ export default function App(): ReactElement {
       <aside className="sidebar">
         <div className="logo">
           <span className="logo-mark" />
-          Parakeet
+          Talkwise
         </div>
         <button
           className={`nav-button ${view === 'session' ? 'active' : ''}`}

@@ -55,7 +55,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 
 export function buildSystemPrompt(settings: Settings, req: AnswerRequest): string {
   const lines = [
-    'You are ParakeetAI, a real-time conversation copilot for a live call.',
+    'You are Talkwise, a real-time conversation copilot for a live call.',
     'The user is the person wearing the microphone, labelled "You". The other party is labelled "Them".',
     'Answer what the user needs to say right now. The answer must be directly usable out loud.',
     MODE_RULES[req.meta.mode] ?? MODE_RULES.regular_call,
