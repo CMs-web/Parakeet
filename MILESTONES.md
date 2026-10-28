@@ -6,7 +6,7 @@ This document outlines the roadmap to complete the Parakeet AI clone (Reverse En
 - [x] Reverse engineer core app constants (`src/shared/limits.ts`).
 - [x] Define core shared data models (`SessionMode`, `SessionBrief`, `SessionRecord`) (`src/shared/types.ts`).
 - [x] Align `SessionMeta` with `SessionBrief` (`SessionRecord extends SessionBrief`).
-- [ ] Fix all TypeScript compilation errors in the renderer (`src/renderer/src/App.tsx`).
+- [x] Fix all TypeScript compilation errors in the renderer (`src/renderer/src/App.tsx`).
 
 ## 2. Main Process & Electron Integration
 - [x] Core Electron Window Management (`src/main/windows.ts`).
@@ -41,6 +41,6 @@ This document outlines the roadmap to complete the Parakeet AI clone (Reverse En
 
 ## 7. Quality Assurance & Build
 - [x] Fix `documents.ts` and `index.ts` TS compilation errors.
-- [ ] Run `npm run typecheck` to ensure 0 errors.
-- [ ] Run `npm run build` to produce the final executable.
+- [x] Run `npm run typecheck` to ensure 0 errors.
+- [x] Run `npm run build` to produce the final executable.
 - [ ] Test Windows Installer and executable build.
