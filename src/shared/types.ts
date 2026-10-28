@@ -1,16 +1,23 @@
+import { DEFAULT_AI_MODEL, PRODUCT_LIMITS, type MeetingApp } from './limits'
+
+export type SessionMode = 'interview' | 'regular_call'
 export type Speaker = 'you' | 'them'
-export type SessionMode = 'general' | 'interview' | 'sales' | 'support'
-export type SttProvider = 'openai' | 'speechmatics' | 'local'
+export type SttProvider = 'speechmatics' | 'openai' | 'local'
 export type LlmProvider = 'openai' | 'anthropic'
 
-export type ResponseFormat = 'bullets' | 'short-paragraph' | 'structured'
-export type ResponseLength = 'brief' | 'balanced' | 'detailed'
-export type ResponseTone = 'professional' | 'friendly' | 'confident' | 'concise'
+/** Enumerations recovered from the 3.9.135 renderer; see shared/limits.ts. */
+export type ResponseFormat = 'paragraph' | 'balanced' | 'bullets'
+export type ResponseLength = 'concise' | 'balanced' | 'detailed'
+export type ResponseTone = 'simple' | 'formal' | 'casual'
+export type DocumentSelectionMode = 'all' | 'none' | 'custom'
+export type DocumentKind = 'resume' | 'document'
 
 export interface AnswerPrefs {
-  responseFormat: ResponseFormat
   responseLength: ResponseLength
+  responseFormat: ResponseFormat
   responseTone: ResponseTone
+  useStarMethod: boolean
+  useFillerWords: boolean
 }
 
 export interface SttSettings {
@@ -18,8 +25,11 @@ export interface SttSettings {
   openaiKey: string
   openaiModel: string
   speechmaticsKey: string
+  /** Per-call keys are minted server-side in the real app; this is the local fallback. */
+  speechmaticsUrl: string
   localUrl: string
   language: string
+  speakerDiarization: boolean
 }
 
 export interface LlmSettings {
@@ -45,15 +55,26 @@ export interface LimitSettings {
   cooldownMinutes: number
 }
 
+export interface SessionDefaults extends AnswerPrefs {
+  sessionMode: SessionMode
+  language: string
+  aiModel: string
+  autoAnswer: boolean
+  saveTranscription: boolean
+  documentSelectionMode: DocumentSelectionMode
+}
+
 export interface Settings {
   stt: SttSettings
   llm: LlmSettings
   overlay: OverlaySettings
   limits: LimitSettings
-  defaults: AnswerPrefs & { sessionMode: SessionMode }
+  defaults: SessionDefaults
   autoAnswer: boolean
   captureSystemAudio: boolean
   captureMic: boolean
+  autoDetectMeetings: boolean
+  autoExtend: boolean
   hotkeys: Record<string, string>
   onboarded: boolean
 }
@@ -65,6 +86,8 @@ export interface TranscriptSegment {
   startedAt: number
   endedAt: number
   final: boolean
+  /** Speechmatics speaker label (S1, S2…) when diarization attributed a voice. */
+  speakerLabel?: string
 }
 
 export interface AnswerRecord {
@@ -74,24 +97,45 @@ export interface AnswerRecord {
   model: string
   createdAt: number
   latencyMs: number | null
+  auto: boolean
+  /** Renderer feedback channel equivalent: feedback.rateResponse. */
+  rating?: 'up' | 'down' | null
 }
 
-export interface SessionMeta {
+export interface SessionBrief {
   mode: SessionMode
   title: string
-  company: string
+  companyDomain: string
   description: string
+  jobPostUrl: string | null
+  language: string
   extraContext: string
+  resumeId: string | null
+  saveTranscription: boolean
+  aiModel: string
+  autoAnswer: boolean
   answerPrefs: AnswerPrefs
+  documentSelectionMode: DocumentSelectionMode
+  selectedDocumentIds: string[]
+  isMock: boolean
 }
 
-export interface SessionRecord extends SessionMeta {
+export interface SessionBilling {
+  freeSession: boolean
+  creditsCharged: number
+  extensions: number
+  extendedMinutes: number
+  refunded: boolean
+}
+
+export interface SessionRecord extends SessionBrief {
   id: string
   createdAt: number
   endedAt: number | null
   durationMs: number
   segments: TranscriptSegment[]
   answers: AnswerRecord[]
+  billing: SessionBilling
 }
 
 export interface SessionSummary {
@@ -101,9 +145,11 @@ export interface SessionSummary {
   durationMs: number
   mode: SessionMode
   title: string
-  company: string
+  companyDomain: string
   segmentCount: number
   answerCount: number
+  freeSession: boolean
+  isMock: boolean
 }
 
 export interface AnswerRequest {
@@ -111,7 +157,9 @@ export interface AnswerRequest {
   question: string
   instruction: string
   segments: TranscriptSegment[]
-  meta: SessionMeta
+  meta: SessionBrief
+  /** Resolved in the main process from the document store. */
+  documents?: Array<{ name: string; text: string }>
 }
 
 export interface AnswerDelta {
@@ -145,7 +193,9 @@ export interface SttRuntimeConfig {
   openaiKey: string
   openaiModel: string
   speechmaticsKey: string
+  speechmaticsUrl: string
   localUrl: string
+  speakerDiarization: boolean
 }
 
 export interface AppStatus {
@@ -155,14 +205,58 @@ export interface AppStatus {
   recording: boolean
 }
 
+export interface DocumentRecord {
+  id: string
+  kind: DocumentKind
+  name: string
+  text: string
+  createdAt: number
+}
+
+export interface BillingState {
+  credits: number
+  freeSessionsUsed: number
+  /** Epoch ms when the free-session cooldown ends, or null when a free run is available. */
+  freeSessionAvailableAt: number | null
+  lastEndedSessionId: string | null
+  lastEndedAt: number | null
+  /** Epoch ms until which the last session can be rejoined for free. */
+  resumeAvailableUntil: number | null
+  purchaseCount: number
+}
+
+export interface StartQuote {
+  allowed: boolean
+  reason: string | null
+  free: boolean
+  cost: number
+  durationMinutes: number
+  cooldownEndsAt: number | null
+  credits: number
+}
+
+export interface MeetingDetection {
+  app: MeetingApp | null
+  since: number | null
+  title: string | null
+}
+
+export interface DeepLinkAuth {
+  callSessionId: string | null
+  authToken: string
+  receivedAt: number
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   stt: {
-    provider: 'openai',
+    provider: 'speechmatics',
     openaiKey: '',
     openaiModel: 'gpt-4o-transcribe',
     speechmaticsKey: '',
+    speechmaticsUrl: 'wss://eu2.rt.speechmatics.com/v2',
     localUrl: 'http://127.0.0.1:8080/inference',
-    language: 'en'
+    language: 'en',
+    speakerDiarization: true
   },
   llm: {
     provider: 'openai',
@@ -179,45 +273,59 @@ export const DEFAULT_SETTINGS: Settings = {
     width: 460
   },
   limits: {
-    trialMinutes: 10,
-    callMinutes: 30,
-    extensionMinutes: 20,
-    cooldownMinutes: 12
+    trialMinutes: PRODUCT_LIMITS.maxTrialDurationMinutes,
+    callMinutes: PRODUCT_LIMITS.maxCallDurationMinutes,
+    extensionMinutes: PRODUCT_LIMITS.freeSessionExtensionMinutes,
+    cooldownMinutes: PRODUCT_LIMITS.freeSessionCooldownMinutes
   },
   defaults: {
-    sessionMode: 'general',
-    responseFormat: 'bullets',
+    sessionMode: 'regular_call',
+    language: 'en',
+    aiModel: DEFAULT_AI_MODEL,
+    autoAnswer: false,
+    saveTranscription: true,
+    documentSelectionMode: 'all',
     responseLength: 'balanced',
-    responseTone: 'professional'
+    responseFormat: 'balanced',
+    responseTone: 'simple',
+    useStarMethod: false,
+    useFillerWords: false
   },
   autoAnswer: false,
+  autoExtend: true,
+  autoDetectMeetings: true,
   captureSystemAudio: true,
   captureMic: true,
   hotkeys: {
-    toggleOverlay: 'CommandOrControl+Shift+Space',
-    answerNow: 'CommandOrControl+Alt+Enter',
-    clearAnswer: 'CommandOrControl+Shift+Backspace',
-    scrollUp: 'CommandOrControl+Up',
-    scrollDown: 'CommandOrControl+Down',
-    toggleMic: 'CommandOrControl+Shift+Up',
-    toggleSystem: 'CommandOrControl+Shift+Down',
+    answerNow: 'CommandOrControl+Enter',
+    toggleChat: 'CommandOrControl+Shift+Space',
+    prevAnswer: 'CommandOrControl+Left',
+    nextAnswer: 'CommandOrControl+Right',
+    clearAnswer: 'CommandOrControl+Backspace',
+    clearTranscript: 'CommandOrControl+Shift+Backspace',
+    scrollUp: 'CommandOrControl+Shift+Up',
+    scrollDown: 'CommandOrControl+Shift+Down',
     endSession: 'CommandOrControl+Shift+Enter'
   },
   onboarded: false
 }
 
-export const MODELS: Array<{ id: string; label: string; ttftMs: number | null }> = [
-  { id: 'gpt-4.1', label: 'GPT-4.1', ttftMs: 520 },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', ttftMs: 448 },
-  { id: 'gpt-5', label: 'GPT-5', ttftMs: 506 },
-  { id: 'gpt-5-mini', label: 'GPT-5 Mini', ttftMs: 550 },
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', ttftMs: 1774 },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', ttftMs: 700 },
-  { id: 'cerebras-gpt-oss-120b', label: 'GPT OSS 120B (Cerebras)', ttftMs: 300 },
-  { id: 'gemini-3-1-flash-lite', label: 'Gemini 3.1 Flash Lite', ttftMs: 400 },
-  { id: 'gemini-3-5-flash', label: 'Gemini 3.5 Flash', ttftMs: 450 },
-  { id: 'gemini-3-5-flash-lite', label: 'Gemini 3.5 Flash Lite', ttftMs: 380 },
-  { id: 'gemini-3-6-flash', label: 'Gemini 3.6 Flash', ttftMs: 420 },
-  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', ttftMs: 1200 },
-  { id: 'claude-opus-5', label: 'Claude Opus 5', ttftMs: 1900 }
+/** Catalogue recovered from AI_MODEL_VALUES with display labels. */
+export const MODELS: Array<{ id: string; label: string; group: 'recommended' | 'advanced' | 'legacy' }> = [
+  { id: 'gemini-3-5-flash-lite', label: 'Gemini 3.5 Flash Lite', group: 'recommended' },
+  { id: 'gpt-5-6-luna', label: 'GPT-5.6 Luna', group: 'recommended' },
+  { id: 'gemini-3-6-flash', label: 'Gemini 3.6 Flash', group: 'advanced' },
+  { id: 'gpt-5-6-terra', label: 'GPT-5.6 Terra', group: 'advanced' },
+  { id: 'claude-haiku-4-5', label: 'Claude 4.5 Haiku', group: 'advanced' },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', group: 'advanced' },
+  { id: 'gpt-4.1', label: 'GPT-4.1', group: 'legacy' },
+  { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', group: 'legacy' },
+  { id: 'gpt-5', label: 'GPT-5', group: 'legacy' },
+  { id: 'gpt-5-mini', label: 'GPT-5 Mini', group: 'legacy' },
+  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', group: 'legacy' },
+  { id: 'cerebras-gpt-oss-120b', label: 'GPT OSS 120B (Cerebras)', group: 'legacy' },
+  { id: 'gemini-3-1-flash-lite', label: 'Gemini 3.1 Flash Lite', group: 'legacy' },
+  { id: 'gemini-3-5-flash', label: 'Gemini 3.5 Flash', group: 'legacy' },
+  { id: 'claude-opus-5', label: 'Claude Opus 5', group: 'legacy' },
+  { id: 'gpt-5-6-sol', label: 'GPT-5.6 Sol', group: 'legacy' }
 ]

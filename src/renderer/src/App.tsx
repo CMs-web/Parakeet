@@ -3,7 +3,7 @@ import type { OverlayCommand } from '../../preload'
 import type {
   AnswerRequest,
   OverlayState,
-  SessionMeta,
+  SessionBrief,
   SessionMode,
   SessionRecord,
   Settings,
@@ -24,7 +24,7 @@ const SPEAKERS: Speaker[] = ['you', 'them']
 
 interface SessionForm {
   title: string
-  company: string
+  companyDomain: string
   description: string
   extraContext: string
   mode: SessionMode
@@ -49,10 +49,10 @@ export default function App(): ReactElement {
   const [starting, setStarting] = useState(false)
   const [form, setForm] = useState<SessionForm>({
     title: '',
-    company: '',
+    companyDomain: '',
     description: '',
     extraContext: '',
-    mode: 'general'
+    mode: 'regular_call'
   })
 
   const audioRef = useRef<AudioCapture | null>(null)
@@ -148,14 +148,7 @@ export default function App(): ReactElement {
       question: prompt,
       instruction,
       segments: all,
-      meta: {
-        mode: record.mode,
-        title: record.title,
-        company: record.company,
-        description: record.description,
-        extraContext: record.extraContext,
-        answerPrefs: record.answerPrefs
-      }
+      meta: record
     }
     try {
       const result = await window.api.answer.generate(request)
@@ -240,17 +233,28 @@ export default function App(): ReactElement {
       return
     }
 
-    const meta: SessionMeta = {
+    const meta: SessionBrief = {
       mode: form.mode,
       title: form.title.trim(),
-      company: form.company.trim(),
+      companyDomain: form.companyDomain.trim(),
       description: form.description.trim(),
+      jobPostUrl: null,
+      language: settings.stt.language,
       extraContext: form.extraContext.trim(),
+      resumeId: null,
+      saveTranscription: settings.defaults.saveTranscription,
+      aiModel: settings.llm.model,
+      autoAnswer: settings.defaults.autoAnswer,
       answerPrefs: {
         responseFormat: settings.defaults.responseFormat,
         responseLength: settings.defaults.responseLength,
-        responseTone: settings.defaults.responseTone
-      }
+        responseTone: settings.defaults.responseTone,
+        useStarMethod: settings.defaults.useStarMethod,
+        useFillerWords: settings.defaults.useFillerWords
+      },
+      documentSelectionMode: settings.defaults.documentSelectionMode,
+      selectedDocumentIds: [],
+      isMock: false
     }
 
     let record: SessionRecord
@@ -545,8 +549,10 @@ export default function App(): ReactElement {
                       <label className="field">
                         Company
                         <input
-                          value={form.company}
-                          onChange={(event) => setForm({ ...form, company: event.target.value })}
+                          value={form.companyDomain}
+                          onChange={(event) =>
+                            setForm({ ...form, companyDomain: event.target.value })
+                          }
                           placeholder="Acme"
                         />
                       </label>
@@ -559,10 +565,8 @@ export default function App(): ReactElement {
                           setForm({ ...form, mode: event.target.value as SessionMode })
                         }
                       >
-                        <option value="general">General</option>
+                        <option value="regular_call">Regular Call</option>
                         <option value="interview">Interview</option>
-                        <option value="sales">Sales call</option>
-                        <option value="support">Support call</option>
                       </select>
                     </label>
                     <label className="field">

@@ -8,15 +8,34 @@ import {
   session,
   Tray
 } from 'electron'
-import { createMainWindow, createOverlayWindow, hideOverlay, isOverlayVisible, setOverlayClickThrough, setOverlayOpacity, showOverlay, sendToMain, sendToOverlay } from './windows'
+import {
+  createMainWindow,
+  createOverlayWindow,
+  hideOverlay,
+  isOverlayVisible,
+  setOverlayClickThrough,
+  setOverlayOpacity,
+  showOverlay,
+  broadcast,
+  sendToMain,
+  sendToOverlay
+} from './windows'
 import { registerIpc } from './ipc'
 import { loadSettings } from './store'
+import {
+  getMeetingDetection,
+  onMeetingChange,
+  startMeetingDetector,
+  stopMeetingDetector
+} from './meetings'
+import { PROTOCOL, parseDeepLink, registerProtocol, saveAuth } from './deeplink'
 import type { OverlayCommand } from '../preload'
 
 const TRAY_ICON =
   'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVR42mNgGJRApCLvPzZMtEbdK/uxYoIG4dOMbAjZmvEaMmoAFQygOBqpkpAoTsoDAgCtDDi8Ho2kQgAAAABJRU5ErkJggg=='
 
 let tray: Tray | null = null
+let pendingDeepLink: string | null = null
 
 function sendCommand(command: OverlayCommand): void {
   sendToMain('overlay:command', command)
@@ -35,13 +54,29 @@ async function toggleOverlay(): Promise<void> {
   showOverlay()
 }
 
+/** Ctrl+Shift+Space: bring the panel forward, like the shipped app's chat shortcut. */
+function togglePanel(): void {
+  const window = createMainWindow()
+  if (window.isVisible() && window.isFocused()) {
+    window.hide()
+    return
+  }
+  window.show()
+  window.focus()
+  sendCommand({ type: 'toggle-chat' })
+}
+
 async function registerShortcuts(): Promise<void> {
   const settings = await loadSettings()
   globalShortcut.unregisterAll()
   const handlers: Record<string, () => void> = {
+    toggleChat: togglePanel,
     toggleOverlay: () => void toggleOverlay(),
     answerNow: () => sendCommand({ type: 'answer' }),
+    prevAnswer: () => sendCommand({ type: 'prev-answer' }),
+    nextAnswer: () => sendCommand({ type: 'next-answer' }),
     clearAnswer: () => sendCommand({ type: 'clear' }),
+    clearTranscript: () => sendCommand({ type: 'clear-transcript' }),
     scrollUp: () => sendCommand({ type: 'scroll', direction: 'up' }),
     scrollDown: () => sendCommand({ type: 'scroll', direction: 'down' }),
     toggleMic: () => sendCommand({ type: 'toggle-mic' }),
@@ -66,7 +101,7 @@ function createTray(): void {
   tray.setToolTip('Parakeet Clone')
   const menu = Menu.buildFromTemplate([
     {
-      label: 'Open dashboard',
+      label: 'Open ParakeetAI',
       click: () => {
         const window = createMainWindow()
         window.show()
@@ -112,19 +147,56 @@ function configureDisplayMedia(): void {
 
 function configurePermissions(): void {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === 'media' || permission === 'display-capture')
+    callback(permission === 'media' || permission === 'display-capture' || permission === 'clipboard-read')
   })
 }
+
+function focusPanel(): void {
+  const window = createMainWindow()
+  window.show()
+  window.focus()
+}
+
+async function handleDeepLink(url: string): Promise<void> {
+  const link = parseDeepLink(url)
+  if (link.kind === 'auth') {
+    await saveAuth(link.auth)
+    broadcast('auth:received', link.auth)
+    focusPanel()
+    return
+  }
+  if (link.kind === 'callSession') {
+    broadcast('deeplink:callSession', link.callSessionId)
+    focusPanel()
+  }
+}
+
+function drainDeepLink(): void {
+  if (!pendingDeepLink) return
+  const url = pendingDeepLink
+  pendingDeepLink = null
+  void handleDeepLink(url)
+}
+
+const protocolArg = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`))
+if (protocolArg) pendingDeepLink = protocolArg
+
+registerProtocol()
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    const window = createMainWindow()
-    if (window.isMinimized()) window.restore()
-    window.show()
-    window.focus()
+  app.on('second-instance', (_event, argv) => {
+    const link = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`))
+    if (link) void handleDeepLink(link)
+    focusPanel()
+  })
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    if (app.isReady()) void handleDeepLink(url)
+    else pendingDeepLink = url
   })
 
   app.whenReady().then(async () => {
@@ -134,10 +206,24 @@ if (!gotLock) {
     createMainWindow()
     createTray()
     await registerShortcuts()
+
     const settings = await loadSettings()
     createOverlayWindow(settings.overlay.position, settings.overlay.width)
     setOverlayOpacity(settings.overlay.opacity)
     setOverlayClickThrough(settings.overlay.clickThrough)
+    if (settings.autoDetectMeetings) startMeetingDetector()
+
+    onMeetingChange((detection, change) => {
+      broadcast('meeting:changed', { detection, change })
+      if (change === 'started' && detection.app) {
+        tray?.displayBalloon({
+          title: 'Meeting detected',
+          content: `${detection.app.appName} is running. Open ParakeetAI to start a session.`
+        })
+      }
+    })
+
+    drainDeepLink()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
@@ -146,9 +232,12 @@ if (!gotLock) {
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll()
+    stopMeetingDetector()
   })
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })
 }
+
+export { getMeetingDetection }

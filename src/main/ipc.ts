@@ -3,11 +3,16 @@ import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import { streamAnswer } from './llm'
 import * as sessions from './sessions'
+import * as billing from './billing'
+import * as documents from './documents'
+import { getMeetingDetection } from './meetings'
+import { loadAuth } from './deeplink'
 import { loadSettings, resetSettings, saveSettings } from './store'
 import {
   broadcast,
   createMainWindow,
   createOverlayWindow,
+  getMainWindow,
   getOverlayWindow,
   hideOverlay,
   isOverlayVisible,
@@ -22,8 +27,11 @@ import type { OverlayCommand } from '../preload'
 import type {
   AnswerRequest,
   AppStatus,
+  DocumentRecord,
+  DocumentKind,
   OverlayState,
-  SessionMeta,
+  SessionBrief,
+  SessionRecord,
   Settings,
   TranscriptSegment
 } from '../shared/types'
@@ -39,9 +47,10 @@ async function runAnswer(
   const startedAt = Date.now()
   let text = ''
   try {
+    const docs = request.documents ?? (await documents.resolveSessionDocuments(request.meta))
     const result = await streamAnswer(
       settings,
-      request,
+      { ...request, documents: docs },
       (delta) => {
         text += delta
         broadcast('answer:delta', { requestId, text: delta, done: false })
@@ -54,7 +63,8 @@ async function runAnswer(
       text: result.text || text,
       model: result.model,
       createdAt: startedAt,
-      latencyMs: Date.now() - startedAt
+      latencyMs: Date.now() - startedAt,
+      auto: false
     })
     broadcast('answer:delta', {
       requestId,
@@ -98,17 +108,65 @@ export function registerIpc(): void {
       openaiKey: settings.stt.openaiKey,
       openaiModel: settings.stt.openaiModel,
       speechmaticsKey: settings.stt.speechmaticsKey,
-      localUrl: settings.stt.localUrl
+      speechmaticsUrl: settings.stt.speechmaticsUrl,
+      localUrl: settings.stt.localUrl,
+      speakerDiarization: settings.stt.speakerDiarization
     }
   })
 
-  ipcMain.handle('session:start', async (_event, meta: SessionMeta) => sessions.startSession(meta))
-  ipcMain.handle('session:end', async (_event, id: string) => sessions.endSession(id))
+  ipcMain.handle('billing:get', async () => billing.getBillingState())
+  ipcMain.handle('billing:quote', async () => billing.quoteStart())
+  ipcMain.handle('billing:grant', async () => billing.grantCredits())
+  ipcMain.handle('billing:reset', async () => billing.resetBilling())
+
+  ipcMain.handle(
+    'session:start',
+    async (_event, brief: SessionBrief): Promise<SessionRecord> => {
+      const requested = await billing.quoteStart()
+      if (!requested.allowed) throw new Error(requested.reason ?? 'Session not allowed')
+      const id = randomUUID()
+      const charge = await billing.chargeSessionStart(id)
+      return sessions.startSession(
+        brief,
+        {
+          freeSession: charge.free,
+          creditsCharged: charge.free ? 0 : charge.cost,
+          extensions: 0,
+          extendedMinutes: 0,
+          refunded: false
+        },
+        id
+      )
+    }
+  )
+
+  ipcMain.handle('session:end', async (_event, id: string) => {
+    const record = sessions.getActive(id) ?? (await sessions.getSession(id))
+    const settlement = await billing.settleSession(id, {
+      free: record?.billing.freeSession ?? false
+    })
+    return sessions.endSession(id, settlement.refunded)
+  })
+
+  ipcMain.handle('session:extend', async (_event, id: string) => {
+    const settings = await loadSettings()
+    const result = await billing.extendSession(id)
+    if (!result.ok) return { ok: false, reason: result.reason, state: result.state, record: null }
+    const record = await sessions.recordExtend(id, settings.limits.extensionMinutes)
+    return { ok: true, reason: null, state: result.state, record }
+  })
+
   ipcMain.handle('session:list', async () => sessions.listSessions())
   ipcMain.handle('session:get', async (_event, id: string) => sessions.getSession(id))
   ipcMain.handle('session:delete', async (_event, id: string) => sessions.deleteSession(id))
-
   ipcMain.handle('session:export', async (_event, id: string) => sessions.exportSession(id))
+
+  ipcMain.handle(
+    'session:rate',
+    async (_event, sessionId: string, answerId: string, rating: 'up' | 'down' | null) => {
+      await sessions.rateAnswer(sessionId, answerId, rating)
+    }
+  )
 
   ipcMain.handle('session:save-file', async (_event, id: string): Promise<string | null> => {
     const { markdown, record } = await sessions.exportSession(id)
@@ -144,6 +202,23 @@ export function registerIpc(): void {
   ipcMain.handle('answer:cancel', async (_event, requestId: string) => {
     controllers.get(requestId)?.abort()
   })
+
+  ipcMain.handle('documents:list', async (): Promise<DocumentRecord[]> => documents.listDocuments())
+
+  ipcMain.handle(
+    'documents:add',
+    async (_event, input: { kind: DocumentKind; name: string; text: string }) =>
+      documents.addDocument(input)
+  )
+
+  ipcMain.handle('documents:add-file', async (_event, kind: DocumentKind) =>
+    documents.addDocumentFromFile(getMainWindow(), kind)
+  )
+
+  ipcMain.handle('documents:remove', async (_event, id: string) => documents.removeDocument(id))
+
+  ipcMain.handle('meeting:get', async () => getMeetingDetection())
+  ipcMain.handle('auth:get', async () => loadAuth())
 
   ipcMain.handle('overlay:toggle', async (): Promise<boolean> => {
     if (isOverlayVisible()) {

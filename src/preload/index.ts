@@ -3,11 +3,17 @@ import type {
   AnswerDelta,
   AnswerRequest,
   AppStatus,
+  BillingState,
+  DeepLinkAuth,
+  DocumentKind,
+  DocumentRecord,
+  MeetingDetection,
   OverlayState,
-  SessionMeta,
+  SessionBrief,
   SessionRecord,
   SessionSummary,
   Settings,
+  StartQuote,
   SttRuntimeConfig,
   TranscriptSegment
 } from '../shared/types'
@@ -15,7 +21,11 @@ import type {
 export type OverlayCommand =
   | { type: 'scroll'; direction: 'up' | 'down' }
   | { type: 'clear' }
+  | { type: 'clear-transcript' }
   | { type: 'answer' }
+  | { type: 'prev-answer' }
+  | { type: 'next-answer' }
+  | { type: 'toggle-chat' }
   | { type: 'toggle-mic' }
   | { type: 'toggle-system' }
   | { type: 'end-session' }
@@ -29,12 +39,36 @@ const api = {
   stt: {
     config: (): Promise<SttRuntimeConfig> => ipcRenderer.invoke('stt:config')
   },
+  billing: {
+    get: (): Promise<BillingState> => ipcRenderer.invoke('billing:get'),
+    quote: (): Promise<StartQuote> => ipcRenderer.invoke('billing:quote'),
+    grant: (): Promise<BillingState> => ipcRenderer.invoke('billing:grant'),
+    reset: (): Promise<BillingState> => ipcRenderer.invoke('billing:reset')
+  },
+  documents: {
+    list: (): Promise<DocumentRecord[]> => ipcRenderer.invoke('documents:list'),
+    add: (input: { kind: DocumentKind; name: string; text: string }): Promise<DocumentRecord> =>
+      ipcRenderer.invoke('documents:add', input),
+    addFile: (kind: DocumentKind): Promise<DocumentRecord | null> =>
+      ipcRenderer.invoke('documents:add-file', kind),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('documents:remove', id)
+  },
   session: {
-    start: (meta: SessionMeta): Promise<SessionRecord> => ipcRenderer.invoke('session:start', meta),
+    start: (brief: SessionBrief): Promise<SessionRecord> => ipcRenderer.invoke('session:start', brief),
     end: (id: string): Promise<SessionRecord | null> => ipcRenderer.invoke('session:end', id),
+    extend: (
+      id: string
+    ): Promise<{
+      ok: boolean
+      reason: string | null
+      state: BillingState
+      record: SessionRecord | null
+    }> => ipcRenderer.invoke('session:extend', id),
     list: (): Promise<SessionSummary[]> => ipcRenderer.invoke('session:list'),
     get: (id: string): Promise<SessionRecord | null> => ipcRenderer.invoke('session:get', id),
     remove: (id: string): Promise<void> => ipcRenderer.invoke('session:delete', id),
+    rate: (sessionId: string, answerId: string, rating: 'up' | 'down' | null): Promise<void> =>
+      ipcRenderer.invoke('session:rate', sessionId, answerId, rating),
     export: (id: string): Promise<{ markdown: string; record: SessionRecord | null }> =>
       ipcRenderer.invoke('session:export', id),
     saveFile: (id: string): Promise<string | null> => ipcRenderer.invoke('session:save-file', id)
@@ -47,6 +81,12 @@ const api = {
     generate: (request: AnswerRequest): Promise<{ requestId: string }> =>
       ipcRenderer.invoke('answer:generate', request),
     cancel: (requestId: string): Promise<void> => ipcRenderer.invoke('answer:cancel', requestId)
+  },
+  meeting: {
+    get: (): Promise<MeetingDetection> => ipcRenderer.invoke('meeting:get')
+  },
+  auth: {
+    get: (): Promise<DeepLinkAuth | null> => ipcRenderer.invoke('auth:get')
   },
   overlay: {
     toggle: (): Promise<boolean> => ipcRenderer.invoke('overlay:toggle'),
@@ -84,6 +124,26 @@ const api = {
     const listener = (_event: unknown, visible: boolean): void => callback(visible)
     ipcRenderer.on('overlay:visibility', listener)
     return () => ipcRenderer.removeListener('overlay:visibility', listener)
+  },
+  onMeetingChange: (
+    callback: (payload: { detection: MeetingDetection; change: 'started' | 'ended' | null }) => void
+  ): (() => void) => {
+    const listener = (
+      _event: unknown,
+      payload: { detection: MeetingDetection; change: 'started' | 'ended' | null }
+    ): void => callback(payload)
+    ipcRenderer.on('meeting:changed', listener)
+    return () => ipcRenderer.removeListener('meeting:changed', listener)
+  },
+  onAuth: (callback: (auth: DeepLinkAuth) => void): (() => void) => {
+    const listener = (_event: unknown, payload: DeepLinkAuth): void => callback(payload)
+    ipcRenderer.on('auth:received', listener)
+    return () => ipcRenderer.removeListener('auth:received', listener)
+  },
+  onCallSessionLink: (callback: (callSessionId: string) => void): (() => void) => {
+    const listener = (_event: unknown, id: string): void => callback(id)
+    ipcRenderer.on('deeplink:callSession', listener)
+    return () => ipcRenderer.removeListener('deeplink:callSession', listener)
   }
 }
 
