@@ -78,55 +78,18 @@ export async function getBillingState(): Promise<BillingState> {
   return publicState(await load())
 }
 
-export function cooldownRemainingMs(ledger: Ledger, now = Date.now()): number {
-  if (!ledger.freeSessionAvailableAt) return 0
-  return Math.max(0, ledger.freeSessionAvailableAt - now)
+export function cooldownRemainingMs(_ledger: Ledger, _now = Date.now()): number {
+  return 0
 }
 
-/** Mirrors the disabled-state logic behind "Start · 0.5 credit" in the app. */
+/** In local dev/test mode, unlimited sessions are allowed with 0 cooldown */
 export async function quoteStart(): Promise<StartQuote> {
   const ledger = await load()
-  const now = Date.now()
-  const cooldown = cooldownRemainingMs(ledger, now)
-  if (cooldown > 0) {
-    return {
-      allowed: false,
-      reason: `Free session cooldown: ${Math.ceil(cooldown / 60_000)} min left.`,
-      free: false,
-      cost: PRODUCT_LIMITS.sessionCreditCost,
-      durationMinutes: PRODUCT_LIMITS.maxCallDurationMinutes,
-      cooldownEndsAt: ledger.freeSessionAvailableAt,
-      credits: ledger.credits
-    }
-  }
-  const free = ledger.freeSessionsUsed === 0 || ledger.freeSessionAvailableAt !== null
-  if (free) {
-    return {
-      allowed: true,
-      reason: null,
-      free: true,
-      cost: 0,
-      durationMinutes: PRODUCT_LIMITS.maxTrialDurationMinutes,
-      cooldownEndsAt: null,
-      credits: ledger.credits
-    }
-  }
-  if (ledger.credits < PRODUCT_LIMITS.sessionCreditCost) {
-    return {
-      allowed: false,
-      reason: 'Not enough call credits.',
-      free: false,
-      cost: PRODUCT_LIMITS.sessionCreditCost,
-      durationMinutes: PRODUCT_LIMITS.maxCallDurationMinutes,
-      cooldownEndsAt: null,
-      credits: ledger.credits
-    }
-  }
   return {
     allowed: true,
     reason: null,
-    free: false,
-    cost: PRODUCT_LIMITS.sessionCreditCost,
+    free: true,
+    cost: 0,
     durationMinutes: PRODUCT_LIMITS.maxCallDurationMinutes,
     cooldownEndsAt: null,
     credits: ledger.credits

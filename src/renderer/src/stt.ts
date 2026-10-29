@@ -17,7 +17,11 @@ export interface SttClient {
 }
 
 function cleanTranscript(text: string): string {
-  return text.replace(/\s+/g, ' ').replace(/\s+([,.!?;:])/g, '$1').trim()
+  return text
+    .replace(/\[blank_audio\]/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trim()
 }
 
 class OpenAiRealtimeClient implements SttClient {
@@ -341,6 +345,9 @@ class LocalWhisperClient implements SttClient {
       const form = new FormData()
       form.append('file', new Blob([wav], { type: 'audio/wav' }), 'chunk.wav')
       form.append('response_format', 'json')
+      if (this.config.language) {
+        form.append('language', this.config.language)
+      }
       const response = await fetch(this.config.localUrl, { method: 'POST', body: form })
       if (!response.ok) throw new Error(`local STT ${response.status}`)
       const json = (await response.json()) as { text?: string }

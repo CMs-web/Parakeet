@@ -8,7 +8,6 @@ import type {
   SessionRecord,
   Settings,
   Speaker,
-  StartQuote,
   TranscriptSegment
 } from '../../shared/types'
 import { AudioCapture } from './audio'
@@ -48,7 +47,6 @@ export default function App(): ReactElement {
   const [systemOn, setSystemOn] = useState(false)
   const [overlayVisible, setOverlayVisible] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [quote, setQuote] = useState<StartQuote | null>(null)
   const [form, setForm] = useState<SessionForm>({
     title: '',
     companyDomain: '',
@@ -57,18 +55,6 @@ export default function App(): ReactElement {
     mode: 'regular_call'
   })
 
-  const refreshQuote = useCallback(async (): Promise<void> => {
-    try {
-      const q = await window.api.billing.quote()
-      setQuote(q)
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!session) void refreshQuote()
-  }, [session, refreshQuote])
 
   const audioRef = useRef<AudioCapture | null>(null)
   const clientsRef = useRef(new Map<Speaker, SttClient>())
@@ -155,11 +141,10 @@ export default function App(): ReactElement {
         return
       }
       setExtended((value) => value + 1)
-      void refreshQuote()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Extension failed')
     }
-  }, [refreshQuote])
+  }, [])
 
   const remaining = Math.max(0, allowedSeconds - elapsed)
 
@@ -366,8 +351,7 @@ export default function App(): ReactElement {
     setPartial({ you: '', them: '' })
     setSegments([])
     segmentsRef.current = []
-    void refreshQuote()
-  }, [refreshQuote])
+  }, [])
 
   const toggleSpeaker = useCallback(async (speaker: Speaker): Promise<void> => {
     const capture = audioRef.current
@@ -622,24 +606,14 @@ export default function App(): ReactElement {
                         placeholder="Resume highlights, pricing, product facts…"
                       />
                     </label>
-                    {quote ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--muted)' }}>
-                        <span>Balance: <strong>{quote.credits} cr</strong></span>
-                        <span>•</span>
-                        <span style={{ color: quote.allowed ? 'var(--text)' : '#f87171' }}>
-                          {quote.free ? `Free Trial (${quote.durationMinutes}m)` : `${quote.cost} cr · ${quote.durationMinutes}m`}
-                        </span>
-                        {quote.reason ? <span style={{ color: '#f87171' }}>— {quote.reason}</span> : null}
-                      </div>
-                    ) : null}
                     <div className="toolbar">
                       <button
                         className="primary"
                         type="button"
-                        disabled={starting || (quote !== null && !quote.allowed)}
+                        disabled={starting}
                         onClick={() => void startSession()}
                       >
-                        {starting ? 'Starting…' : quote?.free ? 'Start Free Trial' : 'Start Session (0.5 cr)'}
+                        {starting ? 'Starting…' : 'Start Session'}
                       </button>
                       <button type="button" onClick={() => setView('settings')}>
                         Configure providers

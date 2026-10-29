@@ -7,6 +7,7 @@
   "author": "local",
   "scripts": {
     "dev": "electron-vite dev",
+    "whisper": "C:\\whisper.cpp-1.9.5\\Release\\whisper-server.exe -m C:\\whisper.cpp-1.9.5\\models\\ggml-small.bin --port 8080",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",

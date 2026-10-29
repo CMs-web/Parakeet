@@ -249,7 +249,7 @@ export interface DeepLinkAuth {
 
 export const DEFAULT_SETTINGS: Settings = {
   stt: {
-    provider: 'speechmatics',
+    provider: 'local',
     openaiKey: '',
     openaiModel: 'gpt-4o-transcribe',
     speechmaticsKey: '',

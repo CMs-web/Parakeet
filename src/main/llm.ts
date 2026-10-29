@@ -251,7 +251,9 @@ export async function streamAnswer(
   onDelta: (text: string) => void,
   signal: AbortSignal
 ): Promise<StreamResult> {
-  if (!settings.llm.apiKey) throw new Error('No LLM API key configured')
+  if (settings.llm.provider !== 'ollama' && !settings.llm.apiKey) {
+    throw new Error('No LLM API key configured')
+  }
   if (settings.llm.provider === 'anthropic') {
     return streamAnthropic(settings, req, onDelta, signal)
   }
