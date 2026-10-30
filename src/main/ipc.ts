@@ -1,6 +1,8 @@
+import 'dotenv/config'
 import { app, dialog, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { promises as fs } from 'fs'
+import { promises as fs, createReadStream } from 'fs'
+import path from 'path'
 import { streamAnswer } from './llm'
 import * as sessions from './sessions'
 import * as billing from './billing'
@@ -84,6 +86,40 @@ async function runAnswer(
   }
 }
 
+function normalizeSarvamLanguage(input?: string): string {
+  if (!input) return 'en-IN'
+  const trimmed = input.trim()
+  const map: Record<string, string> = {
+    en: 'en-IN',
+    hi: 'hi-IN',
+    bn: 'bn-IN',
+    kn: 'kn-IN',
+    ml: 'ml-IN',
+    mr: 'mr-IN',
+    od: 'od-IN',
+    or: 'od-IN',
+    pa: 'pa-IN',
+    ta: 'ta-IN',
+    te: 'te-IN',
+    gu: 'gu-IN',
+    as: 'as-IN',
+    ur: 'ur-IN',
+    ne: 'ne-IN',
+    sa: 'sa-IN',
+    auto: 'unknown',
+    unknown: 'unknown'
+  }
+  const lower = trimmed.toLowerCase()
+  if (map[lower]) return map[lower]
+  const SUPPORTED = [
+    'unknown', 'hi-IN', 'bn-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'pa-IN',
+    'ta-IN', 'te-IN', 'en-IN', 'gu-IN', 'as-IN', 'ur-IN', 'ne-IN', 'kok-IN',
+    'ks-IN', 'sd-IN', 'sa-IN', 'sat-IN', 'mni-IN', 'brx-IN', 'mai-IN', 'doi-IN'
+  ]
+  const match = SUPPORTED.find((s) => s.toLowerCase() === lower)
+  return match || 'en-IN'
+}
+
 export function registerIpc(): void {
   ipcMain.handle('settings:get', async (): Promise<Settings> => loadSettings())
 
@@ -110,9 +146,39 @@ export function registerIpc(): void {
       speechmaticsKey: settings.stt.speechmaticsKey,
       speechmaticsUrl: settings.stt.speechmaticsUrl,
       localUrl: settings.stt.localUrl,
-      speakerDiarization: settings.stt.speakerDiarization
+      speakerDiarization: settings.stt.speakerDiarization,
+      sarvamKey: settings.stt.sarvamKey || process.env.SARVAM_API_KEY || '',
+      sarvamModel: settings.stt.sarvamModel || 'saaras:v4'
     }
   })
+
+  ipcMain.handle(
+    'stt:transcribe-sarvam',
+    async (
+      _event,
+      { audio, language }: { audio: Uint8Array; language?: string }
+    ): Promise<string> => {
+      const settings = await loadSettings()
+      const apiKey = (settings.stt.sarvamKey || process.env.SARVAM_API_KEY || '').trim()
+      if (!apiKey) throw new Error('No Sarvam API key found in settings or .env')
+
+      const tempFile = path.join(app.getPath('temp'), `stt_${randomUUID()}.wav`)
+      try {
+        await fs.writeFile(tempFile, Buffer.from(audio))
+        const { SarvamAIClient } = await import('sarvamai')
+        const client = new SarvamAIClient({ apiSubscriptionKey: apiKey })
+        const response = await client.speechToText.transcribe({
+          file: createReadStream(tempFile),
+          model: (settings.stt.sarvamModel || 'saaras:v4') as any,
+          language_code: normalizeSarvamLanguage(language || settings.stt.language) as any,
+          mode: 'transcribe'
+        })
+        return response.transcript || ''
+      } finally {
+        await fs.unlink(tempFile).catch(() => undefined)
+      }
+    }
+  )
 
   ipcMain.handle('billing:get', async () => billing.getBillingState())
   ipcMain.handle('billing:quote', async () => billing.quoteStart())

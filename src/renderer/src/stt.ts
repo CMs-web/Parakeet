@@ -373,11 +373,85 @@ class LocalWhisperClient implements SttClient {
   }
 }
 
+class SarvamClient implements SttClient {
+  readonly speaker: Speaker
+  private config: SttRuntimeConfig
+  private events: SttEvents
+  private buffer: Int16Array[] = []
+  private buffered = 0
+  private timer: number | null = null
+  private busy = false
+  private stopped = false
+
+  constructor(speaker: Speaker, config: SttRuntimeConfig, events: SttEvents) {
+    this.speaker = speaker
+    this.config = config
+    this.events = events
+  }
+
+  async start(): Promise<void> {
+    this.stopped = false
+    this.timer = window.setInterval(() => {
+      void this.flush()
+    }, 3500)
+  }
+
+  push(pcm: Int16Array): void {
+    if (this.stopped) return
+    this.buffer.push(pcm)
+    this.buffered += pcm.length
+    if (this.buffered >= SAMPLE_RATE * 8) void this.flush()
+  }
+
+  private async flush(): Promise<void> {
+    if (this.busy || this.buffered < SAMPLE_RATE * 1.0) return
+    this.busy = true
+    const chunks = this.buffer
+    this.buffer = []
+    this.buffered = 0
+    const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    const merged = new Int16Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+      merged.set(chunk, offset)
+      offset += chunk.length
+    }
+    try {
+      const wav = encodeWav(merged, SAMPLE_RATE)
+      const transcript = await window.api.stt.transcribeSarvam(
+        new Uint8Array(wav),
+        this.config.language || 'en-IN'
+      )
+      const text = cleanTranscript(transcript ?? '')
+      if (text) this.events.onFinal(this.speaker, text)
+    } catch (error) {
+      this.events.onError(
+        this.speaker,
+        error instanceof Error ? error.message : 'Sarvam STT failed'
+      )
+    } finally {
+      this.busy = false
+    }
+  }
+
+  stop(): void {
+    this.stopped = true
+    if (this.timer !== null) {
+      window.clearInterval(this.timer)
+      this.timer = null
+    }
+    void this.flush()
+  }
+}
+
 export function createSttClient(
   speaker: Speaker,
   config: SttRuntimeConfig,
   events: SttEvents
 ): SttClient {
+  if (config.provider === 'sarvam') {
+    return new SarvamClient(speaker, config, events)
+  }
   if (config.provider === 'speechmatics') {
     return new SpeechmaticsClient(speaker, config, events)
   }

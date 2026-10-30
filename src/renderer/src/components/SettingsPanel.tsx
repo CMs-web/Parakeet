@@ -29,6 +29,12 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
 
   return (
     <div className="stack">
+      <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+        <button className="primary" type="button" onClick={() => void save()}>
+          {saved ? 'Saved ✓' : 'Save settings'}
+        </button>
+      </div>
+
       <section className="card">
         <h2>Speech to text</h2>
         <div className="stack">
@@ -37,10 +43,18 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
               Provider
               <select
                 value={draft.stt.provider}
-                onChange={(event) =>
-                  update('stt', { ...draft.stt, provider: event.target.value as Settings['stt']['provider'] })
-                }
+                onChange={(event) => {
+                  const prov = event.target.value as Settings['stt']['provider']
+                  update('stt', {
+                    ...draft.stt,
+                    provider: prov,
+                    language: prov === 'sarvam' && (draft.stt.language === 'en' || !draft.stt.language)
+                      ? 'en-IN'
+                      : draft.stt.language
+                  })
+                }}
               >
+                <option value="sarvam">Sarvam AI (Saaras)</option>
                 <option value="openai">OpenAI Realtime</option>
                 <option value="speechmatics">Speechmatics Realtime</option>
                 <option value="local">Local Whisper HTTP</option>
@@ -48,13 +62,60 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
             </label>
             <label className="field">
               Language
-              <input
-                value={draft.stt.language}
-                onChange={(event) => update('stt', { ...draft.stt, language: event.target.value })}
-                placeholder="en"
-              />
+              {draft.stt.provider === 'sarvam' ? (
+                <select
+                  value={draft.stt.language === 'en' ? 'en-IN' : draft.stt.language || 'en-IN'}
+                  onChange={(event) => update('stt', { ...draft.stt, language: event.target.value })}
+                >
+                  <option value="en-IN">English (India) · en-IN</option>
+                  <option value="hi-IN">Hindi · hi-IN</option>
+                  <option value="bn-IN">Bengali · bn-IN</option>
+                  <option value="kn-IN">Kannada · kn-IN</option>
+                  <option value="ml-IN">Malayalam · ml-IN</option>
+                  <option value="mr-IN">Marathi · mr-IN</option>
+                  <option value="ta-IN">Tamil · ta-IN</option>
+                  <option value="te-IN">Telugu · te-IN</option>
+                  <option value="gu-IN">Gujarati · gu-IN</option>
+                  <option value="pa-IN">Punjabi · pa-IN</option>
+                  <option value="ur-IN">Urdu · ur-IN</option>
+                  <option value="unknown">Auto-detect · unknown</option>
+                </select>
+              ) : (
+                <input
+                  value={draft.stt.language}
+                  onChange={(event) => update('stt', { ...draft.stt, language: event.target.value })}
+                  placeholder="en"
+                />
+              )}
             </label>
           </div>
+          {draft.stt.provider === 'sarvam' ? (
+            <div className="row">
+              <label className="field">
+                Sarvam API key (optional if set in .env)
+                <input
+                  type="password"
+                  value={draft.stt.sarvamKey || ''}
+                  onChange={(event) =>
+                    update('stt', { ...draft.stt, sarvamKey: event.target.value })
+                  }
+                  placeholder="Reads from .env if empty"
+                />
+              </label>
+              <label className="field">
+                STT Model
+                <select
+                  value={draft.stt.sarvamModel || 'saaras:v4'}
+                  onChange={(event) =>
+                    update('stt', { ...draft.stt, sarvamModel: event.target.value })
+                  }
+                >
+                  <option value="saaras:v4">saaras:v4</option>
+                  <option value="saaras:v2">saaras:v2</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
           {draft.stt.provider === 'openai' ? (
             <div className="row">
               <label className="field">
@@ -113,18 +174,22 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
                 onChange={(event) => {
                   const prov = event.target.value as Settings['llm']['provider']
                   const isOllama = prov === 'ollama'
+                  const isSarvam = prov === 'sarvam'
                   update('llm', {
                     ...draft.llm,
                     provider: prov,
                     baseUrl: isOllama && (!draft.llm.baseUrl || draft.llm.baseUrl.includes('openai.com'))
                       ? 'http://localhost:11434/v1'
                       : draft.llm.baseUrl,
-                    model: isOllama && (draft.llm.model.startsWith('gpt-') || draft.llm.model.startsWith('gemini'))
+                    model: isSarvam
+                      ? 'sarvam-105b-conversations'
+                      : isOllama && (draft.llm.model.startsWith('gpt-') || draft.llm.model.startsWith('gemini'))
                       ? 'qwen2.5:3b'
                       : draft.llm.model
                   })
                 }}
               >
+                <option value="sarvam">Sarvam AI (sarvam-105b)</option>
                 <option value="openai">OpenAI compatible</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="ollama">Ollama (Local: localhost:11434)</option>
@@ -157,19 +222,25 @@ export function SettingsPanel({ settings, onSave, onReset }: SettingsPanelProps)
               </datalist>
             </label>
           </div>
+          {draft.llm.provider !== 'sarvam' ? (
+            <label className="field">
+              Base URL
+              <input
+                placeholder={draft.llm.provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1'}
+                value={draft.llm.baseUrl}
+                onChange={(event) => update('llm', { ...draft.llm, baseUrl: event.target.value })}
+              />
+            </label>
+          ) : null}
           <label className="field">
-            Base URL
-            <input
-              placeholder={draft.llm.provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1'}
-              value={draft.llm.baseUrl}
-              onChange={(event) => update('llm', { ...draft.llm, baseUrl: event.target.value })}
-            />
-          </label>
-          <label className="field">
-            API key {draft.llm.provider === 'ollama' ? '(Optional for local Ollama)' : ''}
+            {draft.llm.provider === 'sarvam'
+              ? 'Sarvam API key (optional if set in .env)'
+              : draft.llm.provider === 'ollama'
+              ? 'API key (Optional for local Ollama)'
+              : 'API key'}
             <input
               type="password"
-              placeholder={draft.llm.provider === 'ollama' ? 'Not required for Ollama' : ''}
+              placeholder={draft.llm.provider === 'sarvam' ? 'Reads from .env if empty' : draft.llm.provider === 'ollama' ? 'Not required for Ollama' : 'sk-...'}
               value={draft.llm.apiKey}
               onChange={(event) => update('llm', { ...draft.llm, apiKey: event.target.value })}
             />

@@ -37,7 +37,13 @@ function Overlay(): React.ReactElement {
   }, [])
 
   const statusLabel =
-    state.status === 'answering' ? 'Answering' : state.status === 'listening' ? 'Listening' : 'Idle'
+    state.status === 'answering'
+      ? 'Answering'
+      : state.status === 'listening'
+        ? 'Listening'
+        : state.status === 'paused'
+          ? 'Paused'
+          : 'Idle'
 
   return (
     <div className="overlay-shell">

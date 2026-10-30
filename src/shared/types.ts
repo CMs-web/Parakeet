@@ -2,8 +2,8 @@ import { DEFAULT_AI_MODEL, PRODUCT_LIMITS, type MeetingApp } from './limits'
 
 export type SessionMode = 'interview' | 'regular_call'
 export type Speaker = 'you' | 'them'
-export type SttProvider = 'speechmatics' | 'openai' | 'local'
-export type LlmProvider = 'openai' | 'anthropic' | 'ollama'
+export type SttProvider = 'speechmatics' | 'openai' | 'local' | 'sarvam'
+export type LlmProvider = 'openai' | 'anthropic' | 'ollama' | 'sarvam'
 
 /** Enumerations recovered from the 3.9.135 renderer; see shared/limits.ts. */
 export type ResponseFormat = 'paragraph' | 'balanced' | 'bullets'
@@ -30,6 +30,8 @@ export interface SttSettings {
   localUrl: string
   language: string
   speakerDiarization: boolean
+  sarvamKey?: string
+  sarvamModel?: string
 }
 
 export interface LlmSettings {
@@ -177,7 +179,7 @@ export interface AudioDeviceInfo {
 }
 
 export interface OverlayState {
-  status: 'idle' | 'listening' | 'answering' | 'error'
+  status: 'idle' | 'listening' | 'paused' | 'answering' | 'error'
   timer: string
   question: string
   answer: string
@@ -196,6 +198,8 @@ export interface SttRuntimeConfig {
   speechmaticsUrl: string
   localUrl: string
   speakerDiarization: boolean
+  sarvamKey?: string
+  sarvamModel?: string
 }
 
 export interface AppStatus {
@@ -249,14 +253,16 @@ export interface DeepLinkAuth {
 
 export const DEFAULT_SETTINGS: Settings = {
   stt: {
-    provider: 'local',
+    provider: 'sarvam',
     openaiKey: '',
     openaiModel: 'gpt-4o-transcribe',
     speechmaticsKey: '',
     speechmaticsUrl: 'wss://eu2.rt.speechmatics.com/v2',
     localUrl: 'http://127.0.0.1:8080/inference',
-    language: 'en',
-    speakerDiarization: true
+    language: 'en-IN',
+    speakerDiarization: true,
+    sarvamKey: '',
+    sarvamModel: 'saaras:v4'
   },
   llm: {
     provider: 'openai',

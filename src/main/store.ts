@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { app } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -32,6 +33,21 @@ export async function loadSettings(): Promise<Settings> {
     cache = merge(DEFAULT_SETTINGS, JSON.parse(raw))
   } catch {
     cache = structuredClone(DEFAULT_SETTINGS)
+  }
+  if (!cache.stt.sarvamKey && process.env.SARVAM_API_KEY) {
+    cache.stt.sarvamKey = process.env.SARVAM_API_KEY
+  }
+  if (cache.stt.provider === 'sarvam' && cache.stt.language === 'en') {
+    cache.stt.language = 'en-IN'
+  }
+  if (cache.llm.provider === 'sarvam' && !cache.llm.apiKey && process.env.SARVAM_API_KEY) {
+    cache.llm.apiKey = process.env.SARVAM_API_KEY
+  }
+  if (cache.llm.model.startsWith('sarvam-')) {
+    cache.llm.provider = 'sarvam'
+    if (!cache.llm.apiKey && process.env.SARVAM_API_KEY) {
+      cache.llm.apiKey = process.env.SARVAM_API_KEY
+    }
   }
   return cache
 }

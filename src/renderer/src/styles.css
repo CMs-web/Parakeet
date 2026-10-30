@@ -74,6 +74,16 @@ button.danger {
   color: #fca5a5;
 }
 
+button.warning {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+button.warning:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
 input,
 select,
 textarea {
@@ -247,6 +257,11 @@ label.field {
   background: var(--accent);
   box-shadow: 0 0 10px rgba(45, 212, 191, 0.7);
   animation: pulse 1.6s ease-in-out infinite;
+}
+
+.dot-paused {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
 .dot-error {

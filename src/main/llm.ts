@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import type { AnswerRequest, Settings } from '../shared/types'
 
 const FORMAT_RULES: Record<string, string> = {
@@ -245,12 +246,70 @@ async function streamAnthropic(
   return { text, model: settings.llm.model }
 }
 
+const SARVAM_KEY_MIN_LENGTH = 24
+
+function isSarvamKey(value: string | undefined | null): boolean {
+  const key = value?.trim() ?? ''
+  return key.startsWith('sk_') && key.length >= SARVAM_KEY_MIN_LENGTH
+}
+
+function resolveSarvamKey(settings: Settings): string {
+  const sources: Array<[string, string | undefined]> = [
+    ['Settings → LLM API key', settings.llm.apiKey],
+    ['Settings → Sarvam STT key', settings.stt.sarvamKey],
+    ['.env SARVAM_API_KEY', process.env.SARVAM_API_KEY]
+  ]
+  for (const [, value] of sources) {
+    if (isSarvamKey(value)) return value!.trim()
+  }
+  const suspect = sources.find(([, value]) => Boolean(value?.trim()))
+  if (suspect) {
+    throw new Error(
+      `The Sarvam key in ${suspect[0]} does not look valid (it should start with "sk_"). Clear it in Settings so the .env key is used.`
+    )
+  }
+  throw new Error('No Sarvam API key configured in Settings or .env')
+}
+
+async function streamSarvam(
+  settings: Settings,
+  req: AnswerRequest,
+  onDelta: (text: string) => void,
+  signal: AbortSignal
+): Promise<StreamResult> {
+  const apiKey = resolveSarvamKey(settings)
+
+  const { SarvamAIClient } = await import('sarvamai')
+  const client = new SarvamAIClient({ apiSubscriptionKey: apiKey })
+  const model = (settings.llm.model || 'sarvam-105b-conversations') as any
+
+  const response = await client.chat.completions(
+    {
+      model,
+      messages: [
+        { role: 'system', content: buildSystemPrompt(settings, req) },
+        { role: 'user', content: buildUserPrompt(req) }
+      ],
+      temperature: settings.llm.temperature,
+      max_tokens: settings.llm.maxTokens
+    },
+    { abortSignal: signal }
+  )
+
+  const text = response.choices?.[0]?.message?.content || ''
+  if (text) onDelta(text)
+  return { text, model }
+}
+
 export async function streamAnswer(
   settings: Settings,
   req: AnswerRequest,
   onDelta: (text: string) => void,
   signal: AbortSignal
 ): Promise<StreamResult> {
+  if (settings.llm.provider === 'sarvam' || settings.llm.model.startsWith('sarvam-')) {
+    return streamSarvam(settings, req, onDelta, signal)
+  }
   if (settings.llm.provider !== 'ollama' && !settings.llm.apiKey) {
     throw new Error('No LLM API key configured')
   }

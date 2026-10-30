@@ -18,7 +18,7 @@ import { HistoryPanel } from './components/HistoryPanel'
 import { SettingsPanel } from './components/SettingsPanel'
 
 type View = 'session' | 'history' | 'settings'
-type Status = 'idle' | 'listening' | 'answering' | 'error'
+type Status = 'idle' | 'listening' | 'paused' | 'answering' | 'error'
 
 const SPEAKERS: Speaker[] = ['you', 'them']
 
@@ -39,6 +39,8 @@ export default function App(): ReactElement {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [status, setStatus] = useState<Status>('idle')
+  const [isListening, setIsListening] = useState(true)
+  const isListeningRef = useRef(true)
   const [model, setModel] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -106,7 +108,7 @@ export default function App(): ReactElement {
       if (delta.done) {
         if (delta.model) setModel(delta.model)
         requestRef.current = null
-        setStatus(sessionRef.current ? 'listening' : 'idle')
+        setStatus(sessionRef.current ? (isListeningRef.current ? 'listening' : 'paused') : 'idle')
         return
       }
       setAnswer((current) => current + delta.text)
@@ -244,7 +246,8 @@ export default function App(): ReactElement {
     const sttConfig = await window.api.stt.config()
     const missingKey =
       (sttConfig.provider === 'openai' && !sttConfig.openaiKey) ||
-      (sttConfig.provider === 'speechmatics' && !sttConfig.speechmaticsKey)
+      (sttConfig.provider === 'speechmatics' && !sttConfig.speechmaticsKey) ||
+      (sttConfig.provider === 'sarvam' && !sttConfig.sarvamKey)
     if (missingKey) {
       capture.stop()
       setError('Add a speech-to-text API key in Settings before starting.')
@@ -316,9 +319,12 @@ export default function App(): ReactElement {
     clientsRef.current = clients
     audioRef.current = capture
     capture.onFrame((speaker, pcm) => {
+      if (!isListeningRef.current) return
       clientsRef.current.get(speaker)?.push(pcm)
     })
 
+    setIsListening(true)
+    isListeningRef.current = true
     setSession(record)
     setSegments([])
     setPartial({ you: '', them: '' })
@@ -351,6 +357,17 @@ export default function App(): ReactElement {
     setPartial({ you: '', them: '' })
     setSegments([])
     segmentsRef.current = []
+    setIsListening(true)
+    isListeningRef.current = true
+  }, [])
+
+  const toggleListening = useCallback((): void => {
+    const next = !isListeningRef.current
+    isListeningRef.current = next
+    setIsListening(next)
+    if (sessionRef.current && statusRef.current !== 'answering') {
+      setStatus(next ? 'listening' : 'paused')
+    }
   }, [])
 
   const toggleSpeaker = useCallback(async (speaker: Speaker): Promise<void> => {
@@ -510,12 +527,32 @@ export default function App(): ReactElement {
                   <span className={`dot dot-${status}`} />
                   {status === 'listening'
                     ? 'Listening'
-                    : status === 'answering'
-                      ? 'Answering'
-                      : status === 'error'
-                        ? 'Error'
-                        : 'Idle'}
+                    : status === 'paused'
+                      ? 'Paused'
+                      : status === 'answering'
+                        ? 'Answering'
+                        : status === 'error'
+                          ? 'Error'
+                          : 'Idle'}
                 </span>
+                {session ? (
+                  <button
+                    type="button"
+                    className={isListening ? 'warning' : 'primary'}
+                    onClick={() => toggleListening()}
+                  >
+                    {isListening ? '⏸ Stop Listening' : '▶ Listen'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={starting}
+                    onClick={() => void startSession()}
+                  >
+                    {starting ? 'Starting…' : '🎙️ Start Listening'}
+                  </button>
+                )}
                 <button type="button" onClick={() => void toggleOverlay()}>
                   {overlayVisible ? 'Hide overlay' : 'Show overlay'}
                 </button>
@@ -613,7 +650,7 @@ export default function App(): ReactElement {
                         disabled={starting}
                         onClick={() => void startSession()}
                       >
-                        {starting ? 'Starting…' : 'Start Session'}
+                        {starting ? 'Starting…' : '🎙️ Start Listening'}
                       </button>
                       <button type="button" onClick={() => setView('settings')}>
                         Configure providers
@@ -641,7 +678,17 @@ export default function App(): ReactElement {
             ) : (
               <div className="columns">
                 <section className="card">
-                  <h2>Transcript</h2>
+                  <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+                    <h2 style={{ margin: 0 }}>Transcript</h2>
+                    <button
+                      type="button"
+                      className={isListening ? 'warning' : 'primary'}
+                      style={{ padding: '3px 12px', fontSize: 12 }}
+                      onClick={() => toggleListening()}
+                    >
+                      {isListening ? '⏸ Stop Listening' : '▶ Listen'}
+                    </button>
+                  </div>
                   <div className="transcript">
                     {transcriptItems.length === 0 ? (
                       <p style={{ color: 'var(--muted)', margin: 0 }}>

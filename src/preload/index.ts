@@ -37,7 +37,9 @@ const api = {
     reset: (): Promise<Settings> => ipcRenderer.invoke('settings:reset')
   },
   stt: {
-    config: (): Promise<SttRuntimeConfig> => ipcRenderer.invoke('stt:config')
+    config: (): Promise<SttRuntimeConfig> => ipcRenderer.invoke('stt:config'),
+    transcribeSarvam: (audio: Uint8Array, language?: string): Promise<string> =>
+      ipcRenderer.invoke('stt:transcribe-sarvam', { audio, language })
   },
   billing: {
     get: (): Promise<BillingState> => ipcRenderer.invoke('billing:get'),
